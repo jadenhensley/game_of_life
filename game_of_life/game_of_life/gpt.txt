@@ -1,0 +1,113 @@
+package main
+
+import (
+	"image/color"
+	"log"
+	"math"
+	"math/rand"
+	"time"
+
+	"github.com/ebitenui/ebitenui"
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+)
+
+const (
+	CELL_COUNT_WIDTH = 32
+	SCREEN_RATIO     = 8
+	SCALE_FACTOR     = 80
+	WIDTH            = SCREEN_RATIO * SCALE_FACTOR
+	HEIGHT           = WIDTH // 8 * 80 = 640 by 640
+	CELL_SIZE        = WIDTH / CELL_COUNT_WIDTH
+	CELL_COUNT_TOTAL = CELL_COUNT_WIDTH * CELL_COUNT_WIDTH
+)
+
+var PAUSED = true
+
+type Game struct {
+	ui       *ebitenui.UI
+	grid     [CELL_COUNT_TOTAL]bool
+	backGrid [CELL_COUNT_TOTAL]bool
+}
+
+func RGBAFromPercent(r, g, b, a float64) color.RGBA {
+	iR := uint8(math.Round(r * 255))
+	iG := uint8(math.Round(g * 255))
+	iB := uint8(math.Round(b * 255))
+	iA := uint8(math.Round(a * 255))
+	return color.RGBA{iR, iG, iB, iA}
+}
+
+func (g *Game) Update() error {
+	g.ui.Update()
+
+	mX, mY := ebiten.CursorPosition()
+	pressed := inpututil.PressedKeys()
+	for _, key := range pressed {
+		if key == ebiten.KeyEnter {
+			PAUSED = !PAUSED
+		}
+	}
+
+	if !PAUSED && (0 <= mX && mX <= WIDTH) && (0 <= mY && mY <= HEIGHT) {
+		cX := mX / CELL_SIZE
+		cY := mY / CELL_SIZE
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
+			index := cY*CELL_COUNT_WIDTH + cX
+			g.backGrid[index] = !g.grid[index]
+		}
+	}
+
+	return nil
+}
+
+func (g *Game) Draw(screen *ebiten.Image) {
+	g.ui.Draw(screen)
+
+	var image *ebiten.Image = ebiten.NewImage(WIDTH, HEIGHT)
+	image.Fill(RGBAFromPercent(1, 1, 1, 0))
+
+	// Draw grid lines
+	for i := 0; i <= CELL_COUNT_WIDTH; i++ {
+		x := i * CELL_SIZE
+		ebitenutil.DrawLine(image, float64(x), 0, float64(x), float64(HEIGHT), RGBAFromPercent(0.5, 0.5, 0.5, 0))
+		ebitenutil.DrawLine(image, 0, float64(x), float64(WIDTH), float64(x), RGBAFromPercent(0.5, 0.5, 0.5, 0))
+	}
+
+	// Draw yellow squares for selected cells
+	for y := 0; y < CELL_COUNT_WIDTH; y++ {
+		for x := 0; x < CELL_COUNT_WIDTH; x++ {
+			index := y*CELL_COUNT_WIDTH + x
+			if g.backGrid[index] {
+				ebitenutil.DrawRect(image, float64(x*CELL_SIZE), float64(y*CELL_SIZE), CELL_SIZE, CELL_SIZE, RGBAFromPercent(0.9, 0.9, 0, 0))
+			}
+		}
+	}
+
+	screen.DrawImage(image, &ebiten.DrawImageOptions{})
+}
+
+func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	return WIDTH, HEIGHT
+}
+
+func main() {
+	ebiten.SetWindowSize(WIDTH, HEIGHT)
+	ebiten.SetWindowTitle("Game of Life (made by Jaden Hensley)")
+	rand.Seed(time.Now().UnixNano())
+
+	rootContainer := mywidgets.GetContainer()
+
+	ui := ebitenui.UI{
+		Container: rootContainer,
+	}
+
+	g := Game{
+		ui:   &ui,
+		grid: [CELL_COUNT_TOTAL]bool{},
+	}
+
+	if err := ebiten.RunGame(&g); err != nil {
+		log.Fatal(err)
+	}
+}

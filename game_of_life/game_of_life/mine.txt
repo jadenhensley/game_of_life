@@ -1,0 +1,169 @@
+package main
+
+import (
+	"image/color"
+	"log"
+	"math"
+	"math/rand"
+	"time"
+
+	"game_of_life/game_of_life/mywidgets"
+
+	"github.com/ebitenui/ebitenui"
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+)
+
+var SCREEN_RATIO Vector2i = Vector2i{8, 8}
+var SCALE_FACTOR int = 80
+var WIDTH int = SCREEN_RATIO.x * SCALE_FACTOR
+var HEIGHT int = WIDTH // 8 * 80 = 640 by 640
+const CELL_COUNT_WIDTH = 32
+
+var CELL_SIZE int = WIDTH / CELL_COUNT_WIDTH
+var CELL_COUNT_TOTAL = CELL_COUNT_WIDTH * CELL_COUNT_WIDTH
+var PAUSED bool = true
+
+type CellID int
+
+type Game struct {
+	ui    *ebitenui.UI
+	grids [2][CELL_COUNT_WIDTH][CELL_COUNT_WIDTH]bool
+}
+
+type Vector2i struct {
+	x int
+	y int
+}
+
+type Vector2f struct {
+	x float32
+	y float32
+}
+
+func RGBAFromPercent(r float64, g float64, b float64, a float64) *color.RGBA {
+	if (0 <= r && r <= 1) && (0 <= g && g <= 1) && (0 <= b && 0 <= 1) && (0 <= a && a <= 0) {
+		var i_r uint8 = uint8((math.Round(r * 255)))
+		var i_g uint8 = uint8((math.Round(g * 255)))
+		var i_b uint8 = uint8((math.Round(b * 255)))
+		var i_a uint8 = uint8((math.Round(a * 255)))
+		return &color.RGBA{i_r, i_g, i_b, i_a}
+	} else {
+		return nil
+	}
+}
+
+func (g *Game) Update() error {
+	// fmt.Printf("\n%s\n", inpututil.PressedKeys())
+	g.ui.Update()
+	mX, mY := ebiten.CursorPosition()
+	// fmt.Printf("%d, %d", mX, mY)
+	pressed := inpututil.PressedKeys()
+	for _, key := range pressed {
+		if key == ebiten.KeyEnter {
+			if !PAUSED {
+				PAUSED = true
+			} else {
+				PAUSED = false
+			}
+		}
+	}
+
+	if (0 <= mX && mX <= WIDTH) && (0 <= mY && mY <= HEIGHT) {
+		cX := mX / CELL_SIZE
+		cY := mY / CELL_SIZE
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
+			g.grids[0][cY][cX] = true
+
+		}
+	}
+
+	return nil
+}
+
+func (g *Game) Draw(screen *ebiten.Image) {
+	g.ui.Draw(screen)
+	// ebitenutil.DebugPrint(screen, "Hello, World!")
+	var image *ebiten.Image = ebiten.NewImage(WIDTH, HEIGHT)
+	// fmt.Println(image)
+	image.Fill(RGBAFromPercent(1, 1, 1, 0))
+
+	var currentCellsArray [CELL_COUNT_WIDTH]Vector2i
+
+	for x := 0; x < CELL_COUNT_WIDTH; x++ {
+		currentCellsArray[x].x = -1
+		currentCellsArray[x].y = -1
+	}
+
+	for yCell := 0; yCell < CELL_COUNT_WIDTH; yCell++ {
+		currentCellIndex := 0
+		for xCell := 0; xCell < CELL_COUNT_WIDTH; xCell++ {
+			if g.grids[0][yCell][xCell] {
+				currentCellsArray[currentCellIndex].x = xCell
+				currentCellsArray[currentCellIndex].y = yCell
+				currentCellIndex += 1
+			}
+		}
+		for y := 0; y < HEIGHT; y++ {
+			for x := 0; x < WIDTH; x++ {
+				// rgba := image.At(x, y).(color.RGBA)
+				// if rgba != &color.RGBA{255,255,255,0} {
+
+				// Draw Lines around each cell.
+				if ((x % CELL_SIZE) == 0) || ((y % CELL_SIZE) == 0) {
+					image.Set(x, y, RGBAFromPercent(.5, .5, .5, 0))
+				}
+
+				// Draw yellow square if cell is selected
+				for _, currentCell := range currentCellsArray {
+					if currentCell.x >= 0 && currentCell.y >= 0 {
+						if currentCell.x*CELL_SIZE <= x && x <= currentCell.x*CELL_SIZE+CELL_SIZE {
+							if currentCell.y*CELL_SIZE <= y && y <= currentCell.y*CELL_SIZE+CELL_SIZE {
+								image.Set(x, y, RGBAFromPercent(.9, .9, 0, 0))
+							}
+						}
+					}
+				}
+
+			}
+		}
+	}
+
+	screen.DrawImage(image, &ebiten.DrawImageOptions{})
+
+}
+
+func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	return WIDTH, HEIGHT
+}
+
+func main() {
+	ebiten.SetWindowSize(WIDTH, HEIGHT)
+	ebiten.SetWindowTitle("Game of Life (made by Jaden Hensley)")
+	rand.Seed(time.Now().UnixNano())
+
+	rootContainer := mywidgets.GetContainer()
+
+	// construct the UI
+	ui := ebitenui.UI{
+		Container: rootContainer,
+	}
+
+	var g Game = Game{ui: &ui,
+		grids: [2][CELL_COUNT_WIDTH][CELL_COUNT_WIDTH]bool{
+			{},
+			{},
+		},
+	}
+
+	for y := 0; y < CELL_COUNT_WIDTH; y++ {
+		for x := 0; x < CELL_COUNT_WIDTH; x++ {
+			g.grids[0][y][x] = false
+			g.grids[0][y][x] = false
+		}
+	}
+
+	if err := ebiten.RunGame(&Game{ui: &ui}); err != nil {
+		log.Fatal(err)
+	}
+}
